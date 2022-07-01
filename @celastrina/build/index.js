@@ -1,23 +1,45 @@
-
+/*
+ * Copyright (c) 2022, KRI, LLC.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
 "use strict";
+
 const moment = require("moment");
+const {Subscription, ResourceGroup, ResourceManager} = require("./resourceManager");
 
-
-class Subscription {
-	constructor(name, id) {
-		this._name = name;
-		this._id = id;
-	}
-
-	static getByName(name) {}
-	static getById(id) {}
-}
-
+/**
+ * Resource
+ * @author Robert R Murrell
+ */
 class Resource {
 	/**
 	 * @param {string} name
 	 * @param {string} type
-	 * @param {function(Deployment)} [callback=null]
+	 * @param {function} [callback=null]
 	 * @param {Object} [options=null]
 	 */
 	constructor(name, type, callback = null, options = null) {
@@ -53,7 +75,7 @@ class Resource {
 	 */
 	setBeforeCallback(callback = null) {
 		if(this._beforeCallback != null)
-			throw new Error("A resource can only perform an Before action only once.");
+			throw new Error("A resource can only register a Before action once.");
 		this._beforeCallback = callback;
 	}
 	/**
@@ -61,7 +83,7 @@ class Resource {
 	 */
 	setAfterCallback(callback = null) {
 		if(this._afterCallback != null)
-			throw new Error("A resource can only perform an After action only once.");
+			throw new Error("A resource can only register an After action once.");
 		this._afterCallback = callback;
 	}
 	/**
@@ -69,7 +91,7 @@ class Resource {
 	 */
 	setCreateOrUpdateCallback (callback = null) {
 		if(this._actionCallback != null)
-			throw new Error("A resource can only perform a Create Or Update, or Remove action only once.");
+			throw new Error("A resource can only register a Create Or Update, or Remove action once.");
 		this._actionCallback = callback;
 	}
 	/**
@@ -79,20 +101,8 @@ class Resource {
 		// TODO: On load of the resource manager, check for this callback, if resource not found in azure but this
 		//  callback specified do we error?
 		if(this._actionCallback != null)
-			throw new Error("A resource can only perform a Create Or Update, or Remove action only once.");
+			throw new Error("A resource can only register a Create Or Update, or Remove action once.");
 		this._actionCallback = callback;
-	}
-}
-
-class ResourceGroup extends Resource {
-	constructor(name, location) {
-		super(name, location);
-	}
-	/**
-	 * @param {Resource} resource
-	 */
-	add(resource) {
-
 	}
 }
 /**
@@ -114,6 +124,9 @@ class Deployment {
 		/**@type{Function}*/this._prepareCallback = callback;
 		/**@type{Function}*/this._startCallback = null;
 		/**@type{Function}*/this._finishCallback = null;
+		/**@type{Function}*/this._beforeEachCallback = null;
+		/**@type{Function}*/this._afterEachCallback = null;
+
 		this._opts = options
 		/**@type{Array<Resource>}*/this._resources = [];
 		/**@type{Resource}*/this._context = null;
@@ -164,17 +177,19 @@ class Deployment {
 	}
 	/**
 	 * @brief
+	 * @return Promise<void>
 	 */
-	prepare() {
-		this._prepareCallback.call(this, this);
+	async prepare() {
+		await this._prepareCallback.call(this, this);
 	}
 	/**
 	 * @brief
+	 * @return Promise<void>
 	 */
-	prepareResources() {
+	async prepareResources() {
 		for(const _resource of this._resources) {
 			this._context = _resource;
-			_resource.prepare(this);
+			await _resource.prepare(this);
 		}
 	}
 	/**
@@ -184,10 +199,12 @@ class Deployment {
 		this._context.setBeforeCallback(callback);
 	}
 	/**
-	 * @param {function(Resource?)} [callback=null]
+	 * @param {function(Deployment?,Resource?)} [callback=null]
 	 */
 	setBeforeEachCallback(callback = null) {
-		//
+		if(this._beforeEachCallback != null)
+			throw new Error("A deployment can only register a BeforeEach action once.");
+		this._beforeEachCallback = callback;
 	}
 	/**
 	 * @param {function(Resource?)} [callback=null]
@@ -199,7 +216,9 @@ class Deployment {
 	 * @param {function(Resource?)} [callback=null]
 	 */
 	setAfterEachCallback(callback = null) {
-
+		if(this._afterEachCallback != null)
+			throw new Error("A deployment can only register a BeforeEach action once.");
+		this._afterEachCallback = callback;
 	}
 	/**
 	 * @param {function(Resource?)} [callback=null]
@@ -214,22 +233,21 @@ class Deployment {
 		this._context.setRemoveCallback(callback);
 	}
 	/**
-	 *
+	 * @return {Promise<void>}
 	 */
-	run() {
+	async run() {
 		// Lookup the default subscription and resource group.
 		// TODO: Lookup (GET) Subscription meta from ResourceManager.
 		// TODO: Lookup (GET) ResourceGroup meta from ResourceManager.
 
-
 		if(this._startCallback != null)
-			this._startCallback.call(this, this);
+			await this._startCallback.call(this, this);
 
 		// Resolve the resources.
 		// Loop through the resources and run those.
 
 		if(this._finishCallback != null)
-			this._finishCallback.call(this, this);
+			await this._finishCallback.call(this, this);
 	}
 	/**
 	 * @param {function(Deployment?)} [callback=null]
@@ -238,13 +256,19 @@ class Deployment {
 		this._startCallback = callback;
 	}
 }
-
+/**
+ * Azure
+ * @author Robert R Murrell
+ */
 const Azure = {
 	locations: {
 		eastus: "eastus"
 	}
 }
-
+/**
+ * DeploymentManager
+ * @author Robert R Murrell
+ */
 class DeploymentManager {
 	static PHASE = {IDLE: "IDLE", PREPARE_DEPLOYMENTS: "PREPARE DEPLOYMENTS", PREPARE_RESOURCES: "PREPARE RESOURCES"}
 	constructor() {
@@ -329,7 +353,7 @@ class DeploymentManager {
 		this._context.setContextBeforeCallback(callback);
 	}
 	/**
-	 * @param {function(Resource?)} [callback=null]
+	 * @param {function(Deployment?,Resource?)} [callback=null]
 	 */
 	setContextBeforeEachCallback(callback = null) {
 		this._context.setBeforeEachCallback(callback);
@@ -358,61 +382,81 @@ class DeploymentManager {
 	setContextRemoveCallback (callback = null) {
 		this._context.setContextRemoveCallback(callback);
 	}
+
 	/**
 	 * @brief
 	 */
 	deploy() {
-		this._prepareDeployments();
-		this._prepareResources();
+		this._deploy()
+			.then(() => {
+
+			})
+			.catch((exception) => {
+				console.log(exception);
+			});
+	}
+	/**
+	 * @return {Promise<void>}
+	 * @private
+	 */
+	async _deploy() {
+		await this._prepareDeployments();
+		await this._prepareResources();
 
 		// TODO: Resolve dependants
 
-		this._runDeployments();
+		await this._runDeployments();
 	}
 	/**
+	 * @return {Promise<void>}
 	 * @private
 	 */
-	_prepareDeployments() {
+	async _prepareDeployments() {
 		this._phase = DeploymentManager.PHASE.PREPARE_DEPLOYMENTS;
 		for(const _deployment of this._deployments) {
 			console.log("Preparing deployment '" + _deployment.name + "'.");
 			this._context = _deployment;
-			this._context.prepare();
+			await this._context.prepare();
 		}
 	}
 	/**
 	 * @private
 	 */
-	_prepareResources() {
+	async _prepareResources() {
 		this._phase = DeploymentManager.PHASE.PREPARE_RESOURCES;
 		for(const _deployment of this._deployments) {
 			console.log("Preparing resources for deployment '" + _deployment.name + "'.");
 			this._context = _deployment;
-			this._context.prepareResources();
+			await this._context.prepareResources();
 		}
 	}
 	/**
 	 * @private
 	 */
-	_runDeployments() {
+	async _runDeployments() {
 		for(const _deployment of this._deployments) {
 			console.log("Running deployment '" + _deployment.name + "'.");
 			this._context = _deployment;
-			this._context.run();
+			await this._context.run();
 		}
 	}
 }
 
-class ResourceManager {
-	constructor() {}
-}
-
-
+/*
+ * *****************************************************************************
+ * Global Variables
+ * *****************************************************************************
+ */
 /**
  * @type {DeploymentManager}
  */
 const _DeploymentManager_ = new DeploymentManager();
 
+/*
+ * *****************************************************************************
+ * Global Functions
+ * *****************************************************************************
+ */
 /**
  * @param {(string|Array<string>)} name
  */
@@ -476,7 +520,7 @@ function finish(callback) {
  * @param {function(Deployment?, Resource?)} [callback=null]
  */
 function beforeEach(callback) {
-
+	_DeploymentManager_.setContextBeforeEachCallback(callback);
 }
 /**
  * @param {function(Deployment?, Resource?)} [callback=null]
@@ -521,9 +565,8 @@ function deploy(options = null) {
 
 module.exports = {
 	Azure: Azure,
-	Subscription: Subscription,
 	Resource: Resource,
-	ResourceGroup: ResourceGroup,
+	Deployment: Deployment,
 	DeploymentManager: DeploymentManager,
 	ResourceManager: ResourceManager,
 	setSubscription: setSubscription,
