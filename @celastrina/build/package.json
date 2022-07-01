@@ -1,0 +1,37 @@
+{
+  "name": "@celastrina/build",
+  "version": "4.17.43",
+  "description": "Mocha-style Azure Resource Manager Deployment Scripting.",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/celastrina/build.git",
+    "directory": "@celastrina/build"
+  },
+  "keywords": [
+    "Microsoft",
+    "Azure",
+    "Node.js"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/celastrina/core/issues"
+  },
+  "homepage": "https://github.com/celastrina/core#readme",
+  "dependencies": {
+    "@azure/identity": "^2.0.1",
+    "adal-node": "^0.2.2",
+    "axios": "^0.21.1",
+    "moment": "^2.29.1",
+    "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "axios-mock-adapter": "^1.20.0",
+    "mocha": "^9.0.1",
+    "sinon": "^11.1.1"
+  }
+}
